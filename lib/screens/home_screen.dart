@@ -93,18 +93,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildLogo(ColorScheme colorScheme) {
     return Container(
-      width: 120,
-      height: 120,
+      width: 140,
+      height: 140,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            colorScheme.primary,
-            colorScheme.secondary,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(35),
         boxShadow: [
           BoxShadow(
             color: colorScheme.primary.withValues(alpha: 0.3),
@@ -113,11 +105,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      child: Center(
-        child: Icon(
-          Icons.sports_soccer,
-          size: 60,
-          color: colorScheme.onPrimary,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(35),
+        child: Image.asset(
+          'assets/icon.png',
+          fit: BoxFit.cover,
         ),
       ),
     );
@@ -196,20 +188,13 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    colorScheme.primary,
-                    colorScheme.secondary,
-                  ],
-                ),
+                color: colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
                 icon,
                 size: 28,
-                color: colorScheme.onPrimary,
+                color: colorScheme.primary,
               ),
             ),
             const SizedBox(width: 16),

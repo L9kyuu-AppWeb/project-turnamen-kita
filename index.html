@@ -71,25 +71,24 @@
     }
 
     .logo-container {
-      width: 150px;
-      height: 150px;
-      background: var(--gradient);
-      border-radius: 35px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      width: 180px;
+      height: 180px;
+      border-radius: 40px;
       box-shadow: 0 20px 60px rgba(27, 94, 32, 0.3);
       animation: float 3s ease-in-out infinite;
       margin-bottom: 30px;
+      overflow: hidden;
+    }
+
+    .logo-container img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
 
     @keyframes float {
       0%, 100% { transform: translateY(0); }
       50% { transform: translateY(-10px); }
-    }
-
-    .logo-icon {
-      font-size: 70px;
     }
 
     h1 {
@@ -341,12 +340,12 @@
   <!-- Header Section -->
   <header>
     <div class="logo-container">
-      <span class="logo-icon">⚽</span>
+      <img src="assets/icon.png" alt="Turnamen Kita Logo">
     </div>
     <h1>Turnamen Kita</h1>
     <p class="tagline">Kelola Turnamen Sepakbola Anda dengan Mudah</p>
     
-    <a href="../app-release.apk" class="download-btn" download>
+    <a href="build/app/outputs/flutter-apk/app-release.apk" class="download-btn" download>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
         <polyline points="7 10 12 15 17 10"/>

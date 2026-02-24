@@ -143,18 +143,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                 children: [
                   // Logo container
                   Container(
-                    width: 140,
-                    height: 140,
+                    width: 180,
+                    height: 180,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          colorScheme.primary,
-                          colorScheme.secondary,
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(35),
+                      borderRadius: BorderRadius.circular(40),
                       boxShadow: [
                         BoxShadow(
                           color: colorScheme.primary.withValues(alpha: 0.3),
@@ -163,11 +155,11 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                         ),
                       ],
                     ),
-                    child: Center(
-                      child: Icon(
-                        Icons.sports_soccer,
-                        size: 70,
-                        color: colorScheme.onPrimary,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(40),
+                      child: Image.asset(
+                        'assets/icon.png',
+                        fit: BoxFit.cover,
                       ),
                     ),
                   ),
