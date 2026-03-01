@@ -1,4 +1,4 @@
-package com.example.project_liga_standing
+package com.buildset.turnamenkita
 
 import io.flutter.embedding.android.FlutterActivity
 
