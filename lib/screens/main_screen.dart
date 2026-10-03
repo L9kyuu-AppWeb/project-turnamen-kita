@@ -351,37 +351,62 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
       return const Center(child: Text('Belum ada data klasemen'));
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          // Header with legend
-          _buildStandingsHeader(colorScheme),
-          const SizedBox(height: 12),
-          // Standings table
-          _buildModernStandingsTable(colorScheme),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Di layar sempit, kolom GF/GA disembunyikan agar nama tim tetap lega.
+        // Di layar lebar, semua kolom ditampilkan.
+        final bool showDetailedGoals =
+            constraints.maxWidth >= _kBreakpointDetailedGoals;
+
+        final double tableWidth = showDetailedGoals
+            ? _kMinWidthDetailed
+            : _kMinWidthCompact;
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildStandingsHeader(colorScheme),
+              const SizedBox(height: 12),
+              // Tabel dibungkus scroll horizontal agar kolom tidak pernah
+              // terpengegang di layar sangat sempit.
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: tableWidth > constraints.maxWidth
+                        ? tableWidth
+                        : constraints.maxWidth,
+                  ),
+                  child: _buildModernStandingsTable(
+                    colorScheme,
+                    showDetailedGoals: showDetailedGoals,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
   Widget _buildStandingsHeader(ColorScheme colorScheme) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            colorScheme.primaryContainer,
-            colorScheme.primaryContainer.withValues(alpha: 0.5),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
+        color: colorScheme.primaryContainer.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         children: [
-          _buildLegendItem(Icons.emoji_events, 'Top 2', colorScheme.primary),
-          const SizedBox(width: 24),
+          _buildLegendItem(Icons.workspace_premium, 'Juara', colorScheme.primary),
+          const SizedBox(width: 8),
           _buildLegendItem(Icons.trending_up, 'Promosi', colorScheme.tertiary),
+          const Spacer(),
+          _buildLegendItem(Icons.schedule, 'Belum main',
+              colorScheme.onSurfaceVariant),
         ],
       ),
     );
@@ -389,23 +414,23 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
 
   Widget _buildLegendItem(IconData icon, String label, Color color) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 16,
-          height: 16,
+          width: 22,
+          height: 22,
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.2),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: color, width: 2),
+            color: color.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
           ),
-          child: Icon(icon, size: 10, color: color),
+          child: Icon(icon, size: 13, color: color),
         ),
         const SizedBox(width: 6),
         Text(
           label,
           style: TextStyle(
-            fontWeight: FontWeight.w500,
-            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
             color: color,
           ),
         ),
@@ -413,58 +438,95 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildModernStandingsTable(ColorScheme colorScheme) {
+  // ===== Layout constants =====
+  static const double _kRowPadX = 6;
+  static const double _kRankW = 38;
+  static const double _kStatW = 30;
+  static const double _kPointsW = 52;
+  static const double _kRowH = 40;
+  static const double _kMinTeamW = 90;
+  static const double _kOuterPadX = 12;
+
+  // Lebar minimum tabel agar nama tim tetap terbaca.
+  static const double _kMinWidthDetailed = (2 * _kRowPadX) +
+      _kRankW +
+      (8 * _kStatW) +
+      _kPointsW +
+      _kMinTeamW;
+  static const double _kMinWidthCompact = (2 * _kRowPadX) +
+      _kRankW +
+      (6 * _kStatW) +
+      _kPointsW +
+      _kMinTeamW;
+
+  // GF/GA baru ditampilkan bila ruang sisa cukup lega untuk nama tim.
+  static const double _kBreakpointDetailedGoals =
+      _kMinWidthDetailed + (2 * _kOuterPadX);
+
+  Widget _buildModernStandingsTable(
+    ColorScheme colorScheme, {
+    required bool showDetailedGoals,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.25)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          // Table Header
+          // Sticky header
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+            height: _kRowH,
+            padding: const EdgeInsets.symmetric(horizontal: _kRowPadX),
             decoration: BoxDecoration(
-              color: colorScheme.primaryContainer.withValues(alpha: 0.3),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              color: colorScheme.primaryContainer.withValues(alpha: 0.35),
             ),
             child: Row(
               children: [
-                _buildHeaderCell('#', 8, colorScheme),
-                _buildHeaderCell('Tim', 40, colorScheme, isTeam: true),
-                _buildStatCell('M', colorScheme, tooltip: 'Main'),
-                _buildStatCell('W', colorScheme, tooltip: 'Menang'),
-                _buildStatCell('D', colorScheme, tooltip: 'Seri'),
-                _buildStatCell('L', colorScheme, tooltip: 'Kalah'),
-                _buildStatCell('GF', colorScheme, tooltip: 'Gol Masuk'),
-                _buildStatCell('GA', colorScheme, tooltip: 'Gol Kemasukan'),
-                _buildStatCell('GD', colorScheme, tooltip: 'Selisih Gol'),
-                _buildStatCell('Pts', colorScheme, tooltip: 'Poin', isPoints: true),
+                _buildHeaderCell('#', colorScheme, width: _kRankW),
+                const Expanded(child: _TeamHeaderLabel(label: 'Tim')),
+                _buildHeaderCell('M', colorScheme, width: _kStatW),
+                _buildHeaderCell('M', colorScheme, width: _kStatW),
+                _buildHeaderCell('S', colorScheme, width: _kStatW),
+                _buildHeaderCell('K', colorScheme, width: _kStatW),
+                if (showDetailedGoals) ...[
+                  _buildHeaderCell('GF', colorScheme, width: _kStatW),
+                  _buildHeaderCell('GA', colorScheme, width: _kStatW),
+                ],
+                _buildHeaderCell('GD', colorScheme, width: _kStatW),
+                _buildHeaderCell('Pts', colorScheme, width: _kPointsW, bold: true),
               ],
             ),
           ),
-          // Table Rows
+          const Divider(height: 1, thickness: 1),
+          // Rows
           ...List.generate(_standings.length, (i) {
             final s = _standings[i];
             final rank = i + 1;
             final isTop2 = rank <= 2;
+            final isOdd = i.isOdd;
 
             return Container(
+              height: _kRowH,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
               decoration: BoxDecoration(
                 color: isTop2
-                    ? colorScheme.primaryContainer.withValues(alpha: 0.15)
-                    : null,
+                    ? colorScheme.primary.withValues(alpha: 0.08)
+                    : (isOdd
+                        ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)
+                        : null),
                 border: Border(
                   bottom: BorderSide(
-                    color: colorScheme.outlineVariant.withValues(alpha: 0.15),
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.12),
                     width: 1,
                   ),
                 ),
@@ -472,16 +534,18 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
               child: Row(
                 children: [
                   _buildRankCell(rank, colorScheme, isTop2),
-                  _buildTeamCell(s.teamName, colorScheme, isTop2),
-                  _buildStatDataCell('${s.played}', colorScheme),
-                  _buildStatDataCell('${s.won}', colorScheme, 
-                      valueColor: colorScheme.tertiary),
-                  _buildStatDataCell('${s.drawn}', colorScheme),
-                  _buildStatDataCell('${s.lost}', colorScheme),
-                  _buildStatDataCell('${s.goalsFor}', colorScheme),
-                  _buildStatDataCell('${s.goalsAgainst}', colorScheme),
-                  _buildGoalDiffCell(s.goalDifference, colorScheme),
-                  _buildPointsCell(s.points, colorScheme, isTop2),
+                  _TeamCell(teamName: s.teamName, isTop2: isTop2),
+                  _buildStatDataCell('${s.played}', colorScheme, width: _kStatW),
+                  _buildStatDataCell('${s.won}', colorScheme,
+                      width: _kStatW, valueColor: colorScheme.tertiary),
+                  _buildStatDataCell('${s.drawn}', colorScheme, width: _kStatW),
+                  _buildStatDataCell('${s.lost}', colorScheme, width: _kStatW),
+                  if (showDetailedGoals) ...[
+                    _buildStatDataCell('${s.goalsFor}', colorScheme, width: _kStatW),
+                    _buildStatDataCell('${s.goalsAgainst}', colorScheme, width: _kStatW),
+                  ],
+                  _buildGoalDiffCell(s.goalDifference, colorScheme, width: _kStatW),
+                  _buildPointsCell(s.points, colorScheme, isTop2, width: _kPointsW),
                 ],
               ),
             );
@@ -491,37 +555,17 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildHeaderCell(String label, double flex, ColorScheme colorScheme, {bool isTeam = false}) {
-    return Expanded(
-      flex: flex.toInt(),
+  Widget _buildHeaderCell(String label, ColorScheme colorScheme, {required double width, bool bold = false}) {
+    return SizedBox(
+      width: width,
       child: Center(
         child: Text(
           label,
-          textAlign: isTeam ? TextAlign.left : TextAlign.center,
           style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 12,
+            fontWeight: bold ? FontWeight.w800 : FontWeight.w700,
+            fontSize: 11,
+            letterSpacing: 0.2,
             color: colorScheme.onPrimaryContainer,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatCell(String label, ColorScheme colorScheme, {String? tooltip, bool isPoints = false}) {
-    return Expanded(
-      flex: isPoints ? 12 : 10,
-      child: Center(
-        child: Tooltip(
-          message: tooltip ?? '',
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontWeight: isPoints ? FontWeight.bold : FontWeight.w600,
-              fontSize: isPoints ? 13 : 11,
-              color: colorScheme.onPrimaryContainer,
-            ),
           ),
         ),
       ),
@@ -530,25 +574,27 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
 
   Widget _buildRankCell(int rank, ColorScheme colorScheme, bool isTop2) {
     return SizedBox(
-      width: 40,
+      width: _kRankW,
       child: Center(
         child: Container(
-          width: 28,
-          height: 28,
+          width: 26,
+          height: 26,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
             color: isTop2
-                ? colorScheme.primary.withValues(alpha: 0.15)
+                ? colorScheme.primary.withValues(alpha: 0.2)
                 : colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(rank <= 2 ? 99 : 8),
+            border: isTop2
+                ? Border.all(color: colorScheme.primary.withValues(alpha: 0.4), width: 1.5)
+                : null,
           ),
-          child: Center(
-            child: Text(
-              '$rank',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: isTop2 ? colorScheme.primary : colorScheme.onSurfaceVariant,
-              ),
+          child: Text(
+            '$rank',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+              color: isTop2 ? colorScheme.primary : colorScheme.onSurfaceVariant,
             ),
           ),
         ),
@@ -556,34 +602,15 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildTeamCell(String teamName, ColorScheme colorScheme, bool isTop2) {
-    return Expanded(
-      flex: 40,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Text(
-          teamName,
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 13,
-            color: isTop2 ? colorScheme.primary : colorScheme.onSurface,
-          ),
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatDataCell(String value, ColorScheme colorScheme, {Color? valueColor}) {
-    return Expanded(
-      flex: 10,
+  Widget _buildStatDataCell(String value, ColorScheme colorScheme,
+      {required double width, Color? valueColor}) {
+    return SizedBox(
+      width: width,
       child: Center(
         child: Text(
           value,
-          textAlign: TextAlign.center,
           style: TextStyle(
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
             fontSize: 13,
             color: valueColor ?? colorScheme.onSurfaceVariant,
           ),
@@ -592,24 +619,24 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildGoalDiffCell(int goalDiff, ColorScheme colorScheme) {
+  Widget _buildGoalDiffCell(int goalDiff, ColorScheme colorScheme,
+      {required double width}) {
     Color color;
     if (goalDiff > 0) {
-      color = Colors.green;
+      color = Colors.green.shade700;
     } else if (goalDiff < 0) {
-      color = Colors.red;
+      color = Colors.red.shade700;
     } else {
       color = colorScheme.onSurfaceVariant;
     }
 
-    return Expanded(
-      flex: 10,
+    return SizedBox(
+      width: width,
       child: Center(
         child: Text(
           goalDiff > 0 ? '+$goalDiff' : '$goalDiff',
-          textAlign: TextAlign.center,
           style: TextStyle(
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w800,
             fontSize: 13,
             color: color,
           ),
@@ -618,25 +645,85 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildPointsCell(int points, ColorScheme colorScheme, bool isTop2) {
-    return Expanded(
-      flex: 12,
+  Widget _buildPointsCell(int points, ColorScheme colorScheme, bool isTop2,
+      {required double width}) {
+    return SizedBox(
+      width: width,
       child: Center(
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
             color: isTop2
-                ? colorScheme.primary.withValues(alpha: 0.15)
+                ? colorScheme.primary.withValues(alpha: 0.18)
                 : colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(99),
+            border: isTop2
+                ? Border.all(
+                    color: colorScheme.primary.withValues(alpha: 0.35),
+                    width: 1.5)
+                : null,
           ),
           child: Text(
             '$points',
             style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
               color: isTop2 ? colorScheme.primary : colorScheme.onSurfaceVariant,
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TeamHeaderLabel extends StatelessWidget {
+  final String label;
+  const _TeamHeaderLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 6, right: 8),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 11,
+            letterSpacing: 0.2,
+            color: colorScheme.onPrimaryContainer,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TeamCell extends StatelessWidget {
+  final String teamName;
+  final bool isTop2;
+  const _TeamCell({required this.teamName, required this.isTop2});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.only(left: 6, right: 8),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            teamName,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              color: isTop2 ? colorScheme.primary : colorScheme.onSurface,
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
         ),
       ),
