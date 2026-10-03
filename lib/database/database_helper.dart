@@ -197,6 +197,45 @@ class DatabaseHelper {
     );
   }
 
+  /// Reset semua skor di satu grup — untuk lanjutan liga / musim baru
+  /// tanpa menghapus tim & jadwal.
+  Future<int> resetMatchesByGroup(int groupId) async {
+    final db = await database;
+    return await db.update(
+      'matches',
+      {
+        'score_home': 0,
+        'score_away': 0,
+        'is_finished': 0,
+      },
+      where: 'group_id = ?',
+      whereArgs: [groupId],
+    );
+  }
+
+  /// Reset semua skor di seluruh grup pada satu liga.
+  Future<int> resetMatchesByLeague(int leagueId) async {
+    final db = await database;
+    final groups = await db.query('groups',
+        columns: ['id'], where: 'league_id = ?', whereArgs: [leagueId]);
+    int total = 0;
+    for (final g in groups) {
+      final groupId = g['id'] as int;
+      final n = await db.update(
+        'matches',
+        {
+          'score_home': 0,
+          'score_away': 0,
+          'is_finished': 0,
+        },
+        where: 'group_id = ?',
+        whereArgs: [groupId],
+      );
+      total += n;
+    }
+    return total;
+  }
+
   // ==================== STANDINGS ====================
 
   Future<List<StandingEntry>> getStandings(int groupId, int ptsWin, int ptsDraw) async {

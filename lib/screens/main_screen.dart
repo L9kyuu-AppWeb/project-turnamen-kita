@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../models/league_config.dart';
 import '../models/group_model.dart';
@@ -18,6 +20,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   late TabController _tabController;
+  late ScrollController _hScrollController;
   List<GroupModel> _groups = [];
   int _selectedGroupIndex = 0;
   List<MatchModel> _matches = [];
@@ -28,12 +31,14 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _hScrollController = ScrollController();
     _loadData();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _hScrollController.dispose();
     super.dispose();
   }
 
@@ -117,6 +122,133 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     }
   }
 
+  bool get _hasAnyFinishedMatch {
+    return _matches.any((m) => m.isFinished);
+  }
+
+  /// Reset semua skor pada grup yang sedang dipilih —
+  /// dipakai untuk lanjutan liga/musim baru tanpa menghapus tim & jadwal.
+  Future<void> _showResetGroupDialog() async {
+    if (!_hasAnyFinishedMatch) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Belum ada skor yang perlu di-reset')),
+      );
+      return;
+    }
+
+    final groupName = _groups.isNotEmpty
+        ? _groups[_selectedGroupIndex].name
+        : 'grup ini';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        icon: const Icon(Icons.restart_alt, size: 32),
+        title: Text('Reset $groupName?'),
+        content: const Text(
+          'Semua skor di grup ini akan dihapus (kembali 0 - 0) '
+          'sehingga liga bisa dilanjutkan dari awal.\n\n'
+          'Tim dan jadwal TIDAK dihapus.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Reset Grup'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final db = DatabaseHelper.instance;
+      final n = await db.resetMatchesByGroup(
+        _groups[_selectedGroupIndex].id!,
+      );
+      await _loadGroupData(_groups[_selectedGroupIndex].id!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$n pertandingan di-reset. Siap lanjut!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal reset: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Reset semua skor di seluruh grup pada liga ini.
+  Future<void> _showResetLeagueDialog() async {
+    final groupName = _groups.isNotEmpty
+        ? _groups[_selectedGroupIndex].name
+        : '';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        icon: Icon(Icons.warning_amber_rounded,
+            size: 32, color: Theme.of(context).colorScheme.error),
+        title: Text('Reset ${widget.leagueConfig.name}?'),
+        content: Text(
+          'Semua skor di ${_groups.length} grup '
+          '${groupName.isNotEmpty ? '(termasuk $groupName) ' : ''}'
+          'akan dihapus.\n\n'
+          'Tim dan jadwal TIDAK dihapus.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Reset Liga'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final db = DatabaseHelper.instance;
+      final n = await db.resetMatchesByLeague(widget.leagueConfig.id!);
+      _selectedGroupIndex = 0;
+      if (_groups.isNotEmpty) {
+        await _loadGroupData(_groups[_selectedGroupIndex].id!);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$n pertandingan di-reset. Siap lanjut!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal reset: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -136,6 +268,41 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
           },
         ),
         actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: 'Menu liga',
+            onSelected: (value) {
+              if (value == 'reset_league') {
+                _showResetLeagueDialog();
+              } else if (value == 'reset_group') {
+                _showResetGroupDialog();
+              }
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'reset_group',
+                child: Row(
+                  children: [
+                    Icon(Icons.restart_alt, color: colorScheme.primary, size: 20),
+                    const SizedBox(width: 12),
+                    const Text('Reset grup ini'),
+                  ],
+                ),
+              ),
+              if (_groups.length > 1)
+                PopupMenuItem(
+                  value: 'reset_league',
+                  child: Row(
+                    children: [
+                      Icon(Icons.autorenew,
+                          color: colorScheme.error, size: 20),
+                      const SizedBox(width: 12),
+                      const Text('Reset seluruh liga'),
+                    ],
+                  ),
+                ),
+            ],
+          ),
           if (_groups.length > 1)
             PopupMenuButton<int>(
               icon: const Icon(Icons.filter_list),
@@ -351,37 +518,85 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
       return const Center(child: Text('Belum ada data klasemen'));
     }
 
+    final bool isPortrait =
+        MediaQuery.of(context).orientation == Orientation.portrait;
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Di layar sempit, kolom GF/GA disembunyikan agar nama tim tetap lega.
-        // Di layar lebar, semua kolom ditampilkan.
+        // Mode potret: semua kolom tampil dan tabel digeser horizontal.
+        // Mode lanskap/tablet: GF/GA disembunyikan bila ruang tidak cukup.
         final bool showDetailedGoals =
-            constraints.maxWidth >= _kBreakpointDetailedGoals;
+            isPortrait || constraints.maxWidth >= _kBreakpointDetailedGoals;
 
-        final double tableWidth = showDetailedGoals
-            ? _kMinWidthDetailed
-            : _kMinWidthCompact;
+        // Lebar semua kolom yang berukuran tetap.
+        final double fixedW = (2 * _kRowPadX) +
+            _kRankW +
+            (showDetailedGoals ? (8 * _kStatW) : (6 * _kStatW)) +
+            _kPointsW;
+
+        // Ruang yang benar-benar tersedia setelah padding luar.
+        final double availableW = constraints.maxWidth - (2 * _kOuterPadX);
+
+        // Kolom "Tim" memakai sisa ruang, minimal sebesar _kMinTeamW.
+        // Kalau ruang tidak cukup, tabel dibuat lebih lebar dari layar
+        // sehingga bisa digeser ke samping.
+        final double teamW = math.max(
+          isPortrait ? _kMinTeamWPortrait : _kMinTeamW,
+          availableW - fixedW,
+        );
+        final double tableWidth = fixedW + teamW;
 
         return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+          padding: const EdgeInsets.fromLTRB(
+            _kOuterPadX,
+            12,
+            _kOuterPadX,
+            24,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildStandingsHeader(colorScheme),
               const SizedBox(height: 12),
-              // Tabel dibungkus scroll horizontal agar kolom tidak pernah
-              // terpengegang di layar sangat sempit.
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minWidth: tableWidth > constraints.maxWidth
-                        ? tableWidth
-                        : constraints.maxWidth,
+              if (tableWidth > availableW)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8, left: 4, right: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Icon(Icons.swipe_left,
+                          size: 14, color: colorScheme.outline),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Geser tabel ke samping',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: colorScheme.outline,
+                        ),
+                      ),
+                    ],
                   ),
-                  child: _buildModernStandingsTable(
-                    colorScheme,
-                    showDetailedGoals: showDetailedGoals,
+                ),
+              // Scrollbar bawaan disembunyikan khusus di sini: di
+              // desktop/web thumb-nya melayang di tepi bawah viewport
+              // dan menutupi baris terakhir setiap kali tabel digeser.
+              // Geser tetap bisa dengan drag/swipe seperti biasa.
+              ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context)
+                    .copyWith(scrollbars: false),
+                child: SingleChildScrollView(
+                  controller: _hScrollController,
+                  scrollDirection: Axis.horizontal,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  // Ruang bawah agar bayangan tabel tidak terpotong.
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: SizedBox(
+                    width: tableWidth,
+                    child: _buildModernStandingsTable(
+                      colorScheme,
+                      showDetailedGoals: showDetailedGoals,
+                      teamWidth: teamW,
+                    ),
                   ),
                 ),
               ),
@@ -394,17 +609,21 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
 
   Widget _buildStandingsHeader(ColorScheme colorScheme) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: colorScheme.primaryContainer.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Row(
+      // Wrap agar di layar sempit label tidak kepotong/overflow,
+      // melainkan turun ke baris berikutnya.
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           _buildLegendItem(Icons.workspace_premium, 'Juara', colorScheme.primary),
-          const SizedBox(width: 8),
           _buildLegendItem(Icons.trending_up, 'Promosi', colorScheme.tertiary),
-          const Spacer(),
           _buildLegendItem(Icons.schedule, 'Belum main',
               colorScheme.onSurfaceVariant),
         ],
@@ -445,27 +664,16 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   static const double _kPointsW = 52;
   static const double _kRowH = 40;
   static const double _kMinTeamW = 90;
+  static const double _kMinTeamWPortrait = 150;
   static const double _kOuterPadX = 12;
 
-  // Lebar minimum tabel agar nama tim tetap terbaca.
-  static const double _kMinWidthDetailed = (2 * _kRowPadX) +
-      _kRankW +
-      (8 * _kStatW) +
-      _kPointsW +
-      _kMinTeamW;
-  static const double _kMinWidthCompact = (2 * _kRowPadX) +
-      _kRankW +
-      (6 * _kStatW) +
-      _kPointsW +
-      _kMinTeamW;
-
   // GF/GA baru ditampilkan bila ruang sisa cukup lega untuk nama tim.
-  static const double _kBreakpointDetailedGoals =
-      _kMinWidthDetailed + (2 * _kOuterPadX);
+  static const double _kBreakpointDetailedGoals = 456;
 
   Widget _buildModernStandingsTable(
     ColorScheme colorScheme, {
     required bool showDetailedGoals,
+    required double teamWidth,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -493,7 +701,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
             child: Row(
               children: [
                 _buildHeaderCell('#', colorScheme, width: _kRankW),
-                const Expanded(child: _TeamHeaderLabel(label: 'Tim')),
+                SizedBox(width: teamWidth, child: _TeamHeaderLabel(label: 'Tim')),
                 _buildHeaderCell('M', colorScheme, width: _kStatW),
                 _buildHeaderCell('M', colorScheme, width: _kStatW),
                 _buildHeaderCell('S', colorScheme, width: _kStatW),
@@ -534,7 +742,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
               child: Row(
                 children: [
                   _buildRankCell(rank, colorScheme, isTop2),
-                  _TeamCell(teamName: s.teamName, isTop2: isTop2),
+                  _TeamCell(teamName: s.teamName, isTop2: isTop2, width: teamWidth),
                   _buildStatDataCell('${s.played}', colorScheme, width: _kStatW),
                   _buildStatDataCell('${s.won}', colorScheme,
                       width: _kStatW, valueColor: colorScheme.tertiary),
@@ -705,12 +913,15 @@ class _TeamHeaderLabel extends StatelessWidget {
 class _TeamCell extends StatelessWidget {
   final String teamName;
   final bool isTop2;
-  const _TeamCell({required this.teamName, required this.isTop2});
+  final double width;
+  const _TeamCell(
+      {required this.teamName, required this.isTop2, required this.width});
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Expanded(
+    return SizedBox(
+      width: width,
       child: Padding(
         padding: const EdgeInsets.only(left: 6, right: 8),
         child: Align(

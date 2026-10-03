@@ -50,53 +50,132 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              children: [
-                const Spacer(flex: 2),
-                // Logo
-                _buildLogo(colorScheme),
-                const SizedBox(height: 24),
-                // App name
-                Text(
-                  'Turnamen Kita',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.primary,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Kelola Turnamen Sepakbola Anda',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-                const Spacer(flex: 3),
-                // Menu buttons
-                _buildMenuButtons(colorScheme),
-                const Spacer(flex: 2),
-                // Creator info
-                _buildCreatorInfo(colorScheme),
-                const SizedBox(height: 16),
-              ],
-            ),
+          // LayoutBuilder dipakai agar versi scroll tetap bisa
+          // mengisi penuh tinggi layar (minHeight) tanpa Spacer,
+          // sehingga tidak overflow di mode landscape yang pendek.
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isLandscape = MediaQuery.of(context).orientation ==
+                  Orientation.landscape;
+              if (isLandscape) {
+                return _buildLandscapeBody(constraints, colorScheme);
+              }
+              return _buildPortraitBody(constraints, colorScheme);
+            },
           ),
         ),
       ),
     );
   }
 
-  Widget _buildLogo(ColorScheme colorScheme) {
+  /// Tampilan potret: sama seperti sebelumnya, tapi tanpa Spacer
+  /// dan dibungkus scroll agar aman di layar pendek.
+  Widget _buildPortraitBody(
+      BoxConstraints constraints, ColorScheme colorScheme) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24.0),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: constraints.maxHeight - 48,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Logo
+            _buildLogo(colorScheme),
+            const SizedBox(height: 24),
+            // App name
+            Text(
+              'Turnamen Kita',
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: colorScheme.primary,
+                letterSpacing: 1.0,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Kelola Turnamen Sepakbola Anda',
+              style: TextStyle(
+                fontSize: 14,
+                color: colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+            const SizedBox(height: 32),
+            // Menu buttons
+            _buildMenuButtons(colorScheme),
+            const SizedBox(height: 32),
+            // Creator info
+            _buildCreatorInfo(colorScheme),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Tampilan landscape: logo+judul di kiri, menu di kanan,
+  /// dibungkus scroll vertikal agar tidak overflow.
+  Widget _buildLandscapeBody(
+      BoxConstraints constraints, ColorScheme colorScheme) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: constraints.maxHeight - 32,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Kiri: logo + nama + info kreator
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildLogo(colorScheme, size: 84),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Turnamen Kita',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
+                      letterSpacing: 1.0,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Kelola Turnamen Sepakbola Anda',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  _buildCreatorInfo(colorScheme, compact: true),
+                ],
+              ),
+            ),
+            const SizedBox(width: 20),
+            // Kanan: tombol menu
+            Expanded(
+              child: _buildMenuButtons(colorScheme),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogo(ColorScheme colorScheme, {double size = 140}) {
     return Container(
-      width: 140,
-      height: 140,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(35),
+        borderRadius: BorderRadius.circular(size * 0.25),
         boxShadow: [
           BoxShadow(
             color: colorScheme.primary.withValues(alpha: 0.3),
@@ -106,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(35),
+        borderRadius: BorderRadius.circular(size * 0.25),
         child: Image.asset(
           'assets/icon.png',
           fit: BoxFit.cover,
@@ -347,58 +426,68 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildCreatorInfo(ColorScheme colorScheme) {
+  Widget _buildCreatorInfo(ColorScheme colorScheme, {bool compact = false}) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Divider(
           color: colorScheme.outlineVariant.withValues(alpha: 0.3),
           thickness: 1,
         ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.code,
-              size: 16,
-              color: colorScheme.primary,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              'Dibuat oleh ',
-              style: TextStyle(
-                fontSize: 12,
-                color: colorScheme.onSurface.withValues(alpha: 0.6),
+        SizedBox(height: compact ? 6 : 12),
+        // Bungkus dalam FittedBox agar tidak meluber saat landscape sempit.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.code,
+                    size: 16,
+                    color: colorScheme.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Dibuat oleh ',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  Text(
+                    'L9kyuu',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                ],
               ),
-            ),
-            Text(
-              'L9kyuu',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: colorScheme.primary,
+              const SizedBox(height: 4),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.phone,
+                    size: 14,
+                    color: colorScheme.outline,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '0851-5682-2397',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.phone,
-              size: 14,
-              color: colorScheme.outline,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              '0851-5682-2397',
-              style: TextStyle(
-                fontSize: 12,
-                color: colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
