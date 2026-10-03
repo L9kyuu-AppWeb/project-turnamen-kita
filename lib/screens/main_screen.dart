@@ -5,7 +5,6 @@ import '../models/match_model.dart';
 import '../models/standing_entry.dart';
 import '../database/database_helper.dart';
 import 'score_input_dialog.dart';
-import 'setup_screen.dart';
 import 'home_screen.dart';
 
 class MainScreen extends StatefulWidget {
@@ -457,7 +456,6 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
             final s = _standings[i];
             final rank = i + 1;
             final isTop2 = rank <= 2;
-            final isBottom = i == _standings.length - 1;
 
             return Container(
               decoration: BoxDecoration(
