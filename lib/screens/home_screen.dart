@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
 import '../models/league_config.dart';
+import 'league_list_screen.dart';
 import 'setup_screen.dart';
 import 'main_screen.dart';
 
@@ -195,6 +196,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMenuButtons(ColorScheme colorScheme) {
+    // Home di-refresh dari LeagueListScreen juga, sehingga data terakhir
+    // selalu sinkron saat kembali ke halaman ini.
+    void openLeagues() {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const LeagueListScreen()),
+      ).then((_) => _loadLastLeague());
+    }
+
     return Column(
       children: [
         // New League button
@@ -204,17 +214,29 @@ class _HomeScreenState extends State<HomeScreen> {
           title: 'Liga Baru',
           subtitle: 'Buat turnamen baru',
           colorScheme: colorScheme,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const SetupScreen()),
-          ),
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SetupScreen()),
+            );
+            // Refresh "liga terakhir" setelah buat liga baru.
+            _loadLastLeague();
+          },
         ),
         const SizedBox(height: 16),
         // Continue League button
-        if (_isLoading)
-          _buildContinueButtonLoading(colorScheme)
-        else if (_lastLeague != null)
-          _buildMenuButton(
+        _buildContinueArea(colorScheme, openLeagues),
+      ],
+    );
+  }
+
+  /// Area tombol Lanjutkan Liga: plus tombol "Lihat semua" bila data masuk.
+  Widget _buildContinueArea(
+      ColorScheme colorScheme, VoidCallback openLeagues) {
+    if (_isLoading) return _buildContinueButtonLoading(colorScheme);
+
+    final mainButton = _lastLeague != null
+        ? _buildMenuButton(
             context: context,
             icon: Icons.play_circle_outline,
             title: 'Lanjutkan Liga',
@@ -225,10 +247,20 @@ class _HomeScreenState extends State<HomeScreen> {
               MaterialPageRoute(
                 builder: (_) => MainScreen(leagueConfig: _lastLeague!),
               ),
-            ),
+            ).then((_) => _loadLastLeague()),
           )
-        else
-          _buildEmptyContinueButton(colorScheme),
+        : _buildEmptyContinueButton(colorScheme);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        mainButton,
+        const SizedBox(height: 12),
+        TextButton.icon(
+          onPressed: openLeagues,
+          icon: const Icon(Icons.list_alt),
+          label: const Text('Lihat Semua Liga'),
+        ),
       ],
     );
   }

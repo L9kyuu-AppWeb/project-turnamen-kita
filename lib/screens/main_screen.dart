@@ -6,6 +6,8 @@ import '../models/group_model.dart';
 import '../models/match_model.dart';
 import '../models/standing_entry.dart';
 import '../database/database_helper.dart';
+import '../services/export_service.dart';
+import 'knockout_screen.dart';
 import 'score_input_dialog.dart';
 import 'home_screen.dart';
 
@@ -27,10 +29,12 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   List<StandingEntry> _standings = [];
   bool _isLoading = true;
 
+  int get _leagueId => widget.leagueConfig.id!;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _hScrollController = ScrollController();
     _loadData();
   }
@@ -47,9 +51,11 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
 
     try {
       final db = DatabaseHelper.instance;
-      _groups = await db.getGroupsByLeague(widget.leagueConfig.id!);
+      _groups = await db.getGroupsByLeague(_leagueId);
 
       if (_groups.isNotEmpty) {
+        // Tahan indeks kalau datang dari liga yang grupnya berkurang.
+        if (_selectedGroupIndex >= _groups.length) _selectedGroupIndex = 0;
         await _loadGroupData(_groups[_selectedGroupIndex].id!);
       }
     } catch (e) {
@@ -249,6 +255,151 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     }
   }
 
+  // ==================== BAGIKAN (EXPORT & SHARE) ====================
+
+  Future<void> _showShareDialog() async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        icon: const Icon(Icons.share),
+        title: const Text('Bagikan'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Pilih yang ingin dibagikan:',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.tonalIcon(
+              onPressed: () => Navigator.pop(context, 'pdf_this_group'),
+              icon: const Icon(Icons.picture_as_pdf),
+              label: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Text(
+                  (_groups.length > 1 && _groups.isNotEmpty)
+                      ? _groups[_selectedGroupIndex].name
+                      : 'Klasemen grup ini',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            if (_groups.length > 1) ...[
+              const SizedBox(height: 8),
+              FilledButton.tonalIcon(
+                onPressed: () => Navigator.pop(context, 'pdf_all_groups'),
+                icon: const Icon(Icons.folder_zip_outlined),
+                label: const Text('Semua grup (PDF)'),
+              ),
+            ],
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.pop(context, 'copy_text'),
+              icon: const Icon(Icons.copy),
+              label: const Text('Salin sebagai teks'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal'),
+          ),
+        ],
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    switch (result) {
+      case 'copy_text':
+        await _shareAsText();
+        break;
+      case 'pdf_this_group':
+        await _shareStandingsPdf(allGroups: false);
+        break;
+      case 'pdf_all_groups':
+        await _shareStandingsPdf(allGroups: true);
+        break;
+    }
+  }
+
+  Future<void> _shareAsText() async {
+    if (_groups.isEmpty) return;
+    await ExportService.instance.copyStandingsText(
+      league: widget.leagueConfig,
+      data: GroupExportData(
+        group: _groups[_selectedGroupIndex],
+        standings: _standings,
+        matches: _matches,
+      ),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Disalin — tinggal paste di WhatsApp')),
+    );
+  }
+
+  Future<void> _shareStandingsPdf({required bool allGroups}) async {
+    final navigator = Navigator.of(context);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+            SizedBox(width: 16),
+            Text('Menyiapkan PDF...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final db = DatabaseHelper.instance;
+      final groupsToExport = allGroups
+          ? _groups
+          : <GroupModel>[if (_groups.isNotEmpty) _groups[_selectedGroupIndex]];
+
+      final dataList = <GroupExportData>[];
+      for (final g in groupsToExport) {
+        if (allGroups) {
+          // Grup lain belum dimuat di state, ambil langsung dari DB.
+          final m = await db.getMatchesByGroup(g.id!);
+          final s = await db.getStandings(g.id!, widget.leagueConfig.ptsWin,
+              widget.leagueConfig.ptsDraw);
+          dataList.add(GroupExportData(group: g, standings: s, matches: m));
+        } else {
+          dataList.add(GroupExportData(
+              group: g, standings: _standings, matches: _matches));
+        }
+      }
+
+      final file = await ExportService.instance.buildStandingsPdf(
+        league: widget.leagueConfig,
+        groups: dataList,
+      );
+
+      navigator.pop(); // tutup dialog loading
+      await ExportService.instance.shareFiles(
+        [file],
+        text: 'Klasemen ${widget.leagueConfig.name} — dari Turnamen Kita',
+      );
+    } catch (e) {
+      if (!navigator.mounted) return;
+      if (navigator.canPop()) navigator.pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal membuat PDF: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -268,6 +419,11 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
           },
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.share),
+            tooltip: 'Bagikan',
+            onPressed: _showShareDialog,
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             tooltip: 'Menu liga',
@@ -350,6 +506,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
                 tabs: const [
                   Tab(icon: Icon(Icons.sports_soccer), text: 'Pertandingan'),
                   Tab(icon: Icon(Icons.leaderboard), text: 'Klasemen'),
+                  Tab(icon: Icon(Icons.emoji_events), text: 'Knockout'),
                 ],
               ),
             ],
@@ -363,6 +520,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
               children: [
                 _buildMatchesTab(colorScheme),
                 _buildStandingsTab(colorScheme),
+                KnockoutView(leagueConfig: widget.leagueConfig),
               ],
             ),
     );
