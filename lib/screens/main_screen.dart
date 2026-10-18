@@ -686,23 +686,57 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
         final bool showDetailedGoals =
             isPortrait || constraints.maxWidth >= _kBreakpointDetailedGoals;
 
-        // Lebar semua kolom yang berukuran tetap.
+        // Lebar kolom "Tim" menyesuaikan isi (nama terpanjang), tanpa
+        // minimum, dengan batas maksimal = lebar kolom Tim pada layout
+        // awal (availableW - fixedW, minimal _kMinTeamWPortrait/_kMinTeamW).
+        // Nama yang lebih panjang dari batas akan membungkus ke baris
+        // berikutnya, bukan dipotong.
         final double fixedW = (2 * _kRowPadX) +
             _kRankW +
             (showDetailedGoals ? (8 * _kStatW) : (6 * _kStatW)) +
             _kPointsW;
-
-        // Ruang yang benar-benar tersedia setelah padding luar.
         final double availableW = constraints.maxWidth - (2 * _kOuterPadX);
-
-        // Kolom "Tim" memakai sisa ruang, minimal sebesar _kMinTeamW.
-        // Kalau ruang tidak cukup, tabel dibuat lebih lebar dari layar
-        // sehingga bisa digeser ke samping.
-        final double teamW = math.max(
+        final double maxTeamW = math.max(
           isPortrait ? _kMinTeamWPortrait : _kMinTeamW,
           availableW - fixedW,
         );
-        final double tableWidth = fixedW + teamW;
+
+        double longestName = 0;
+        const nameStyle =
+            TextStyle(fontWeight: FontWeight.w700, fontSize: 13);
+        for (final s in _standings) {
+          final tp = TextPainter(
+            text: TextSpan(text: s.teamName, style: nameStyle),
+            maxLines: 1,
+            textDirection: TextDirection.ltr,
+          )..layout();
+          if (tp.width > longestName) longestName = tp.width;
+        }
+        final double teamW = (longestName + 14).clamp(0.0, maxTeamW);
+
+        // Tinggi baris seragam: nama terpanjang yang membungkus (2 baris
+        // atau lebih) menentukan tinggi baris untuk KEDUA pane agar baris
+        // di kiri dan kanan tetap sejajar.
+        int maxLines = 1;
+        double lineHeight = 0;
+        final double textMaxW = teamW - 14; // padding kiri 6 + kanan 8
+        for (final s in _standings) {
+          final tp = TextPainter(
+            text: TextSpan(text: s.teamName, style: nameStyle),
+            textDirection: TextDirection.ltr,
+          )..layout(maxWidth: textMaxW < 1 ? 1 : textMaxW);
+          final int lines = tp.computeLineMetrics().length;
+          if (lines > maxLines) maxLines = lines;
+          if (lineHeight == 0 && lines > 0) lineHeight = tp.height / lines;
+        }
+        if (lineHeight == 0) lineHeight = 18;
+        final double bodyRowH =
+            (maxLines * lineHeight + 20) > _kRowH ? (maxLines * lineHeight + 20) : _kRowH;
+
+        final double leftW = _kRankW + teamW + (2 * _kRowPadX);
+        final double statsW = (showDetailedGoals ? 7 : 5) * _kStatW + _kPointsW;
+        final bool statsScrollable =
+            (leftW + statsW + (2 * _kRowPadX)) > availableW;
 
         return SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(
@@ -716,7 +750,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
             children: [
               _buildStandingsHeader(colorScheme),
               const SizedBox(height: 12),
-              if (tableWidth > availableW)
+              if (statsScrollable)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8, left: 4, right: 4),
                   child: Row(
@@ -735,28 +769,11 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
                     ],
                   ),
                 ),
-              // Scrollbar bawaan disembunyikan khusus di sini: di
-              // desktop/web thumb-nya melayang di tepi bawah viewport
-              // dan menutupi baris terakhir setiap kali tabel digeser.
-              // Geser tetap bisa dengan drag/swipe seperti biasa.
-              ScrollConfiguration(
-                behavior: ScrollConfiguration.of(context)
-                    .copyWith(scrollbars: false),
-                child: SingleChildScrollView(
-                  controller: _hScrollController,
-                  scrollDirection: Axis.horizontal,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  // Ruang bawah agar bayangan tabel tidak terpotong.
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: SizedBox(
-                    width: tableWidth,
-                    child: _buildModernStandingsTable(
-                      colorScheme,
-                      showDetailedGoals: showDetailedGoals,
-                      teamWidth: teamW,
-                    ),
-                  ),
-                ),
+              _buildModernStandingsTable(
+                colorScheme,
+                showDetailedGoals: showDetailedGoals,
+                teamWidth: teamW,
+                bodyRowH: bodyRowH,
               ),
             ],
           ),
@@ -832,7 +849,10 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     ColorScheme colorScheme, {
     required bool showDetailedGoals,
     required double teamWidth,
+    required double bodyRowH,
   }) {
+    // Kolom "Tim" dibekukan (tidak ikut geser horizontal); hanya kolom
+    // statistik yang berada di dalam scroll horizontal.
     return Container(
       decoration: BoxDecoration(
         color: colorScheme.surface,
@@ -847,77 +867,146 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
         ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Sticky header
-          Container(
-            height: _kRowH,
+          // Pane kiri beku: # + Tim
+          SizedBox(
+            width: _kRankW + teamWidth + (2 * _kRowPadX),
+            child: _buildFrozenPane(colorScheme, teamWidth, bodyRowH),
+          ),
+          // Pane kanan: statistik, bisa digeser horizontal
+          Expanded(
+            child: SingleChildScrollView(
+              controller: _hScrollController,
+              scrollDirection: Axis.horizontal,
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: _buildStatsPane(colorScheme, showDetailedGoals, bodyRowH),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFrozenPane(ColorScheme colorScheme, double teamWidth, double bodyRowH) {
+    return Column(
+      children: [
+        Container(
+          height: _kRowH,
+          padding: const EdgeInsets.symmetric(horizontal: _kRowPadX),
+          decoration: BoxDecoration(
+            color: colorScheme.primaryContainer.withValues(alpha: 0.35),
+          ),
+          child: Row(
+            children: [
+              _buildHeaderCell('#', colorScheme, width: _kRankW),
+              SizedBox(width: teamWidth, child: _TeamHeaderLabel(label: 'Tim')),
+            ],
+          ),
+        ),
+        const Divider(height: 1, thickness: 1),
+        ...List.generate(_standings.length, (i) {
+          final s = _standings[i];
+          final rank = i + 1;
+          final isTop2 = rank <= 2;
+          final isOdd = i.isOdd;
+          return Container(
+            height: bodyRowH,
+            padding: const EdgeInsets.symmetric(horizontal: _kRowPadX, vertical: 8),
+            decoration: BoxDecoration(
+              color: isTop2
+                  ? colorScheme.primary.withValues(alpha: 0.08)
+                  : (isOdd
+                      ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)
+                      : null),
+              border: Border(
+                bottom: BorderSide(
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.12),
+                  width: 1,
+                ),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _buildRankCell(rank, colorScheme, isTop2),
+                SizedBox(
+                  width: teamWidth,
+                  child: _TeamCell(teamName: s.teamName, isTop2: isTop2),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildStatsPane(ColorScheme colorScheme, bool showDetailedGoals, double bodyRowH) {
+    return Column(
+      children: [
+        Container(
+          height: _kRowH,
+          padding: const EdgeInsets.symmetric(horizontal: _kRowPadX),
+          decoration: BoxDecoration(
+            color: colorScheme.primaryContainer.withValues(alpha: 0.35),
+          ),
+          child: Row(
+            children: [
+              _buildHeaderCell('M', colorScheme, width: _kStatW),
+              _buildHeaderCell('M', colorScheme, width: _kStatW),
+              _buildHeaderCell('S', colorScheme, width: _kStatW),
+              _buildHeaderCell('K', colorScheme, width: _kStatW),
+              if (showDetailedGoals) ...[
+                _buildHeaderCell('GF', colorScheme, width: _kStatW),
+                _buildHeaderCell('GA', colorScheme, width: _kStatW),
+              ],
+              _buildHeaderCell('GD', colorScheme, width: _kStatW),
+              _buildHeaderCell('Pts', colorScheme, width: _kPointsW, bold: true),
+            ],
+          ),
+        ),
+        const Divider(height: 1, thickness: 1),
+        ...List.generate(_standings.length, (i) {
+          final s = _standings[i];
+          final rank = i + 1;
+          final isTop2 = rank <= 2;
+          final isOdd = i.isOdd;
+          return Container(
+            height: bodyRowH,
             padding: const EdgeInsets.symmetric(horizontal: _kRowPadX),
             decoration: BoxDecoration(
-              color: colorScheme.primaryContainer.withValues(alpha: 0.35),
+              color: isTop2
+                  ? colorScheme.primary.withValues(alpha: 0.08)
+                  : (isOdd
+                      ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)
+                      : null),
+              border: Border(
+                bottom: BorderSide(
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.12),
+                  width: 1,
+                ),
+              ),
             ),
             child: Row(
               children: [
-                _buildHeaderCell('#', colorScheme, width: _kRankW),
-                SizedBox(width: teamWidth, child: _TeamHeaderLabel(label: 'Tim')),
-                _buildHeaderCell('M', colorScheme, width: _kStatW),
-                _buildHeaderCell('M', colorScheme, width: _kStatW),
-                _buildHeaderCell('S', colorScheme, width: _kStatW),
-                _buildHeaderCell('K', colorScheme, width: _kStatW),
+                _buildStatDataCell('${s.played}', colorScheme, width: _kStatW),
+                _buildStatDataCell('${s.won}', colorScheme,
+                    width: _kStatW, valueColor: colorScheme.tertiary),
+                _buildStatDataCell('${s.drawn}', colorScheme, width: _kStatW),
+                _buildStatDataCell('${s.lost}', colorScheme, width: _kStatW),
                 if (showDetailedGoals) ...[
-                  _buildHeaderCell('GF', colorScheme, width: _kStatW),
-                  _buildHeaderCell('GA', colorScheme, width: _kStatW),
+                  _buildStatDataCell('${s.goalsFor}', colorScheme, width: _kStatW),
+                  _buildStatDataCell('${s.goalsAgainst}', colorScheme, width: _kStatW),
                 ],
-                _buildHeaderCell('GD', colorScheme, width: _kStatW),
-                _buildHeaderCell('Pts', colorScheme, width: _kPointsW, bold: true),
+                _buildGoalDiffCell(s.goalDifference, colorScheme, width: _kStatW),
+                _buildPointsCell(s.points, colorScheme, isTop2, width: _kPointsW),
               ],
             ),
-          ),
-          const Divider(height: 1, thickness: 1),
-          // Rows
-          ...List.generate(_standings.length, (i) {
-            final s = _standings[i];
-            final rank = i + 1;
-            final isTop2 = rank <= 2;
-            final isOdd = i.isOdd;
-
-            return Container(
-              height: _kRowH,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              decoration: BoxDecoration(
-                color: isTop2
-                    ? colorScheme.primary.withValues(alpha: 0.08)
-                    : (isOdd
-                        ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)
-                        : null),
-                border: Border(
-                  bottom: BorderSide(
-                    color: colorScheme.outlineVariant.withValues(alpha: 0.12),
-                    width: 1,
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  _buildRankCell(rank, colorScheme, isTop2),
-                  _TeamCell(teamName: s.teamName, isTop2: isTop2, width: teamWidth),
-                  _buildStatDataCell('${s.played}', colorScheme, width: _kStatW),
-                  _buildStatDataCell('${s.won}', colorScheme,
-                      width: _kStatW, valueColor: colorScheme.tertiary),
-                  _buildStatDataCell('${s.drawn}', colorScheme, width: _kStatW),
-                  _buildStatDataCell('${s.lost}', colorScheme, width: _kStatW),
-                  if (showDetailedGoals) ...[
-                    _buildStatDataCell('${s.goalsFor}', colorScheme, width: _kStatW),
-                    _buildStatDataCell('${s.goalsAgainst}', colorScheme, width: _kStatW),
-                  ],
-                  _buildGoalDiffCell(s.goalDifference, colorScheme, width: _kStatW),
-                  _buildPointsCell(s.points, colorScheme, isTop2, width: _kPointsW),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
+          );
+        }),
+      ],
     );
   }
 
@@ -1071,29 +1160,23 @@ class _TeamHeaderLabel extends StatelessWidget {
 class _TeamCell extends StatelessWidget {
   final String teamName;
   final bool isTop2;
-  final double width;
-  const _TeamCell(
-      {required this.teamName, required this.isTop2, required this.width});
+  const _TeamCell({required this.teamName, required this.isTop2});
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: width,
-      child: Padding(
-        padding: const EdgeInsets.only(left: 6, right: 8),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            teamName,
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-              color: isTop2 ? colorScheme.primary : colorScheme.onSurface,
-            ),
-            overflow: TextOverflow.ellipsis,
-            maxLines: 1,
+    return Padding(
+      padding: const EdgeInsets.only(left: 6, right: 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          teamName,
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+            color: isTop2 ? colorScheme.primary : colorScheme.onSurface,
           ),
+          softWrap: true,
         ),
       ),
     );

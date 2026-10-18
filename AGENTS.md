@@ -42,3 +42,8 @@ Flutter app for managing football tournaments (round-robin leagues + group stage
 - Resetting scores (`resetMatchesByGroup` / `resetMatchesByLeague`) also deletes `knockout_matches` for that league — bracket becomes invalid by design.
 - Knockout creation only supports 2 or 4 qualifiers (1 group top-2, or 2 groups top-2 each); tied `points|GD|GF` for position 2 blocks creation.
 - `assets/icon.png` must exist or `flutter run` / icon generation fails.
+
+## Standings table (main_screen.dart)
+
+- `#` + `Tim` are in a frozen left pane; only the stat columns (M/M/S/K/GF/GA/GD/Pts) sit in a horizontally scrollable pane. Both panes share one uniform row height (`bodyRowH`, computed from the longest wrapped team name) so rows stay aligned.
+- Team column width fits the longest name (`longestName + 14` clamped to the original layout max `max(_kMinTeamWPortrait/_kMinTeamW, availableW - fixedW)`). Names are never truncated: `_TeamCell` uses `softWrap: true` with no ellipsis, so a name exceeding the max wraps onto 2+ lines and the row grows.
