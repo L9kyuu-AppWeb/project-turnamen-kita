@@ -53,9 +53,17 @@ android {
 
     buildTypes {
         getByName("release") {
-            // Pastikan baris ini ada
-            signingConfig = signingConfigs.getByName("release")
-            
+            // Pakai release signing hanya jika key.properties ada dan lengkap;
+            // jika tidak, fallback ke debug keystore agar `flutter build apk --release`
+            // tetap bisa jalan untuk testing lokal.
+            signingConfig = if (keystorePropertiesFile.exists()
+                && keystoreProperties.getProperty("storeFile") != null
+                && keystoreProperties.getProperty("keyAlias") != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+
             isMinifyEnabled = false
             isShrinkResources = false
         }
